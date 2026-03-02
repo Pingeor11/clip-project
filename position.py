@@ -17,7 +17,7 @@ BIN_LOCATIONS = {   # 自定义放置点坐标库
 }
 
 def go_to_observation():
-    print("移动到观测位置，准备拍照...")
+    
     mc.send_coords([112.7, -202.5, 263.2, -166.94, 3.13, -134.43], 50, 0) # 确保画面里没有机械臂   # [0, -20, -20, 0, 0, 0]
     time.sleep(5)
     print(mc.get_coords())
@@ -37,8 +37,8 @@ def grab_cube(u, v, bin_name):
     v = initial_arm_y + (u - initial_pixel_u) * zoom    
     '''
     
-    safe_z = 270  # 移动时的安全高度
-    move_z = 120   # 实际抓取（吸住）方块时的高度
+    safe_z = 260  # 移动时的安全高度
+    move_z = 110   # 实际抓取（吸住）方块时的高度
     posture = [180, 0, 0] # 垂直向下
     print(f"--- 任务开始 ---")
     print(f"目标物体像素: ({u}, {v}) -> 物理坐标: ({u:.2f}, {v:.2f})")
@@ -46,7 +46,7 @@ def grab_cube(u, v, bin_name):
 
     # --- 步骤2：移动到物体正上方 ---
     print("1. 正在移动至物体上方...")
-    mc.send_coords([u, v, safe_z] + posture, 50, 0)
+    mc.send_coords([u, v, 200] + posture, 50, 0)
     time.sleep(5)
     print(mc.get_coords())
 
@@ -58,7 +58,7 @@ def grab_cube(u, v, bin_name):
 
     # --- 步骤4：抬起物体 ---
     print("3. 提起物体...")
-    mc.send_coords([u, v, safe_z] + posture, 50, 0)
+    mc.send_coords([u, v, 200] + posture, 50, 0)
     time.sleep(1)
 
     # --- 步骤5：移动到指定的 bin 并释放 ---
@@ -80,66 +80,77 @@ def grab_cube(u, v, bin_name):
 
 
 if __name__ == "__main__":
-    go_to_observation()
+    cap = cv2.VideoCapture(0) 
+    flag = 1
+    while(flag):
+        go_to_observation()
+        
+        ret, frame = cap.read() 
+        if ret == 0:
+            print("No picture is taken!")
+        cv2.imwrite("./mytest.jpg", frame) #save picture
 
-    image.takepic()
+        conf_thre = 0.3
+        #置信度
+        img = cv2.imread("./mytest.jpg")
+        objects, path = mycode3.detect_objects(img, conf_thre = conf_thre)
 
-    conf_thre = 0.3
-      #置信度
-    img = cv2.imread("./mytest.jpg")
-    objects, path = mycode3.detect_objects(img, conf_thre = conf_thre)
+        prompt = input("请输入指令：")
+        # prompt = "I want the gun"
+        text_embedding = mycode3.clip_text_encoder(prompt) #embed the text
+        scores = []
+        bin_num = mycode3.get_location(prompt)
+        bin_name = f"bin{bin_num}"
 
-    prompt = input("请输入指令：")
-    # prompt = "I want the gun"
-    text_embedding = mycode3.clip_text_encoder(prompt) #embed the text
-    scores = []
+        for obj in objects:
+            crop = mycode3.crop_image(img, obj["bbox"])
+            if crop is None:
+                scores.append(-1)  #if naughty box, ignore it
+                continue
 
-    for obj in objects:
-        crop = mycode3.crop_image(img, obj["bbox"])
-        if crop is None:
-            scores.append(-1)  #if naughty box, ignore it
-            continue
+            img_embedding = mycode3.clip_image_encoder(crop) #encode the bbox
 
-        img_embedding = mycode3.clip_image_encoder(crop) #encode the bbox
+            # cosine similarity (dot product because normalized)
+            sim = (img_embedding @ text_embedding.T).item()
+            scores.append(sim) #add cosine similarity to box
 
-        # cosine similarity (dot product because normalized)
-        sim = (img_embedding @ text_embedding.T).item()
-        scores.append(sim) #add cosine similarity to box
-
-    if len(scores) == 0:
-        print("❌ No detected objects for CLIP matching.")
-        selected_bbox = None
-    else:
-        best_idx = int(np.argmax(scores))
-        best_score = scores[best_idx]
-
-        SIM_THRESHOLD = 0.15  # reasonable default
-
-        if best_score < SIM_THRESHOLD:
-            print(f"❌ No object matches prompt (best score={best_score:.3f})")
+        if len(scores) == 0:
+            print("❌ No detected objects for CLIP matching.")
             selected_bbox = None
         else:
-            selected_bbox = objects[best_idx]["bbox"]
-            print(f"✅ Selected object with CLIP score {best_score:.3f}")
+            best_idx = int(np.argmax(scores))
+            best_score = scores[best_idx]
 
-    if selected_bbox is not None:
-        x1, y1, x2, y2 = map(int, selected_bbox)
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 3)
-        cv2.putText(img, "CLIP SELECTED",
-                    (x1, max(y1-10, 0)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8, (0, 0, 255), 2)
-        
+            SIM_THRESHOLD = 0.15  # reasonable default
 
-        cv2.imwrite("results/clip_selected.jpg", img)
+            if best_score < SIM_THRESHOLD:
+                print(f"❌ No object matches prompt (best score={best_score:.3f})")
+                selected_bbox = None
+            else:
+                selected_bbox = objects[best_idx]["bbox"]
+                print(f"✅ Selected object with CLIP score {best_score:.3f}")
 
-    # object area: [to be defined]
-    zone = [135, 0, 410, 270]  
+        if selected_bbox is not None:
+            x1, y1, x2, y2 = map(int, selected_bbox)
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            cv2.putText(img, "CLIP SELECTED",
+                        (x1, max(y1-10, 0)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8, (0, 0, 255), 2)
+            
 
-    xcenter = (x1+x2)/2
-    ycenter = (y1+y2)/2   # 中心像素
-    x = 80+(ycenter-zone[1])/(zone[3]-zone[1])*150
-    y = -80+(xcenter-zone[0])/(zone[2]-zone[0])*150   #坐标转换
-    print(xcenter, ycenter, x, y)
+            cv2.imwrite("results/clip_selected.jpg", img)
 
-    grab_cube(x, y, "bin1") # x, y
+        # object area: [to be defined]
+        zone = [107, 0, 386, 274]  
+
+        xcenter = (x1+x2)/2
+        ycenter = (y1+y2)/2   # 中心像素
+        x = 80+(ycenter-zone[1])/(zone[3]-zone[1])*150+15
+        y = -80+(xcenter-zone[0])/(zone[2]-zone[0])*140+10 #坐标转换
+        print(xcenter, ycenter, x, y)
+
+        go_to_observation()
+        grab_cube(x, y, bin_name) # x, y
+        flag = int(input("如果继续, 请输入1, 否则输入0: "))
+    cap.release()   

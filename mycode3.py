@@ -8,6 +8,7 @@ sys.path.insert(0, "./yolov5")   # 绝对路径，指向你下的仓库根目录
 from yolov5.utils.general import non_max_suppression
 from transformers import CLIPProcessor, CLIPModel
 import torch.nn.functional as F
+from yolov5.utils.augmentations import letterbox
 
 
 # ============================================
@@ -52,7 +53,7 @@ def detect_objects(img_np, conf_thre, output_dir="results", save_name="detection
     img_rgb = cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB)
 
     # ✅ 输入 YOLO：拉伸成 640×640
-    img_resized = cv2.resize(img_rgb, (640, 640))
+    img_resized, ratio, pad = letterbox(img_rgb, new_shape=640)
 
     img_tensor = torch.from_numpy(img_resized).permute(2,0,1).float().unsqueeze(0) / 255.0
     img_tensor = img_tensor.to(next(model.parameters()).device)
@@ -68,8 +69,10 @@ def detect_objects(img_np, conf_thre, output_dir="results", save_name="detection
 
     if pred is not None:
         # ✅ 缩放比例：从640×640→原图
-        sx = w0 / 640.0
-        sy = h0 / 640.0
+        pad_x, pad_y = pad
+        gain = ratio[0]
+
+        
 
         for *xyxy, conf, cls in pred:
             x1, y1, x2, y2 = [float(v) for v in xyxy]
@@ -78,10 +81,13 @@ def detect_objects(img_np, conf_thre, output_dir="results", save_name="detection
                 class_name = target_class_names[target_classes.index(cls)]
 
                 # ✅ 坐标缩回原图
-                bx1 = x1 * sx
-                by1 = y1 * sy
-                bx2 = x2 * sx
-                by2 = y2 * sy
+                pad_x, pad_y = pad
+                gain = ratio[0]  # scale factor
+
+                bx1 = (x1 - pad_x) / gain
+                by1 = (y1 - pad_y) / gain
+                bx2 = (x2 - pad_x) / gain
+                by2 = (y2 - pad_y) / gain
 
                 # ✅ 取置信度最高的
                 if class_name not in best_dets or conf > best_dets[class_name][4]:
@@ -220,20 +226,20 @@ if __name__ == "__main__":
     model.classes = target_classes
 
     conf_thre = 0.4  #置信度
-    img = cv2.imread("./gun.jpg")
+    img = cv2.imread("./test2.jpg")
     objects, path = detect_objects(img, conf_thre = conf_thre)
 
-    prompt = "I want the gun"
+    prompt = "I want the pet"
     text_embedding = clip_text_encoder(prompt) #embed the text
     scores = []
 
     for obj in objects:
         crop = crop_image(img, obj["bbox"])
         if crop is None:
-            scores.append(-1)
+            scores.append(-1)  #if bad box, ignore it
             continue
 
-        img_embedding = clip_image_encoder(crop) #encode the bbox
+        img_embedding = clip_image_encoder(crop) #embed the bbox
 
         # cosine similarity (dot product because normalized)
         sim = (img_embedding @ text_embedding.T).item()
@@ -246,7 +252,7 @@ if __name__ == "__main__":
         best_idx = int(np.argmax(scores))
         best_score = scores[best_idx]
 
-        SIM_THRESHOLD = 0.25  # reasonable default
+        SIM_THRESHOLD = 0.15  # reasonable default
 
         if best_score < SIM_THRESHOLD:
             print(f"❌ No object matches prompt (best score={best_score:.3f})")
@@ -264,6 +270,7 @@ if __name__ == "__main__":
                     0.8, (0, 0, 255), 2)
 
         cv2.imwrite("results/clip_selected.jpg", img)
+
 
 
         
