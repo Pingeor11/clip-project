@@ -114,3 +114,9 @@ Solution: Reset motor zero positions and implemented iterative fine-tuning.
 ## Outcome
 
 Successfully deployed an end-to-end real-time vision-guided robotic grasping system integrating CNN perception, Transformer-based semantic reasoning, spatial inference, and robotic manipulation.
+
+---
+
+## Academic Context
+
+This project was developed as part of the *Media and Cognition* course (Fall 2025) at Tsinghua University.
