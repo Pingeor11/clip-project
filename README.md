@@ -6,6 +6,8 @@ This project implements a real-time deep learning pipeline that integrates CNN-b
 
 The system converts visual detections into calibrated real-world coordinates, enabling accurate spatial inference and autonomous robotic manipulation.
 
+![Workflow](results/IMG_4768.jpg)
+
 ---
 
 ## System Architecture
