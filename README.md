@@ -33,6 +33,7 @@ Image → Letterbox Resize → Model Inference → NMS → Coordinate Restoratio
 
 Output format:
 `{bbox(x1, y1, x2, y2), confidence, class}`
+![Detection Result](results/detections.jpg)
 
 ---
 
@@ -50,6 +51,7 @@ CLIP learns a shared embedding space between text and images, allowing zero-shot
 - Select the highest-confidence semantic match  
 
 Enhancements include prompt standardization, template averaging, threshold tuning, and rejection of off-screen detections for safety.
+![CLIP Selected](results/clip_selected.jpg)
 
 ---
 
