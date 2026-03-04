@@ -81,6 +81,11 @@ Safe Position → Target Localization → Descent → Vacuum Grasp → Lift → 
 Calibration includes safe height definition, descent tuning, posture adjustment, and iterative fine-grained offset correction.
 
 ---
+## Demo
+
+[Watch the demo](IMG_4767.mp4)
+
+---
 
 ## Technical Challenges
 
